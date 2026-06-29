@@ -1,8 +1,9 @@
-torch==2.1.2
-torchvision==0.16.2
-fastapi==0.110.0
-uvicorn==0.29.0
-python-multipart==0.0.9
-mediapipe==0.10.14
-opencv-python-headless==4.9.0.80
-Pillow==10.2.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+fastapi
+uvicorn
+python-multipart
+mediapipe
+opencv-python-headless
+Pillow

@@ -65,7 +65,7 @@ app = FastAPI(title="Face Attribute API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"], 
@@ -77,7 +77,7 @@ print(f"Loading Model to {device}...")
 
 # Load Model
 model = SimpleCNN(num_classes=40).to(device)
-model_path = r"C:\MLA\stage3_gpu_single\checkpoints\best_model_gpu.pth"
+model_path = "best_model_gpu.pth"
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval() # Set to evaluation mode!
 print("Model Loaded Successfully!")

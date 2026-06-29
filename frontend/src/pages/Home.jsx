@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 function Home() {
   const [imagePreview, setImagePreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -59,7 +61,7 @@ function Home() {
     formData.append("file", selectedFile);
 
     try {
-      const response = await axios.post("http://localhost:8000/analyze", formData, {
+      const response = await axios.post(`${API_URL}/analyze`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setResults(response.data);
@@ -78,7 +80,7 @@ function Home() {
     formData.append("file", file);
 
     try {
-      const response = await axios.post("http://localhost:8000/analyze", formData, {
+      const response = await axios.post(`${API_URL}/analyze`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setResults(response.data);

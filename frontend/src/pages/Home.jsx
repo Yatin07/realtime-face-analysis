@@ -146,7 +146,7 @@ function Home() {
         <div className="flex flex-col items-center">
 
           {isWebcamActive && (
-            <div className="flex flex-col items-center bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-2xl">
+            <div className="flex flex-col items-center bg-theme-card border-theme-border p-4 rounded-xl border shadow-2xl">
               {/* Added a red recording indicator if live mode is on */}
               {isLiveMode && <div className="absolute animate-pulse bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold z-10 -mt-2 -ml-[300px]">LIVE AI</div>}
 
@@ -154,7 +154,7 @@ function Home() {
                 audio={false}
                 ref={webcamRef}
                 screenshotFormat="image/jpeg"
-                className="rounded-lg mb-4 border border-gray-600 w-96 h-96 object-cover"
+                className="rounded-lg mb-4 border border-theme-border w-96 h-96 object-cover"
                 videoConstraints={{ width: 400, height: 400, facingMode: "user" }}
               />
 
@@ -177,7 +177,7 @@ function Home() {
 
           {imagePreview && !isWebcamActive && (
             <div className="flex flex-col items-center">
-              <img src={imagePreview} alt="Target face" className="w-96 h-96 object-cover rounded-lg shadow-lg border border-gray-600 mb-4" />
+              <img src={imagePreview} alt="Target face" className="w-96 h-96 object-cover rounded-lg shadow-lg border border-theme-border mb-4" />
               <button
                 onClick={handleAnalyze} disabled={isAnalyzing}
                 className={`px-8 py-3 rounded-lg font-bold shadow-lg transition-transform transform mt-2 ${isAnalyzing ? 'bg-gray-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 hover:scale-105'}`}
@@ -245,10 +245,10 @@ function Home() {
             </div>
 
             {/* NEW: The Toggle Button at the bottom */}
-            <div className="sticky bottom-0 bg-gray-800 pt-4 border-t border-gray-600 mt-6 z-10">
+            <div className="sticky bottom-0 bg-theme-card pt-4 border-t border-theme-border mt-6 z-10">
               <button
                 onClick={() => setShowAllAttributes(!showAllAttributes)}
-                className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-semibold transition"
+                className="w-full py-2 bg-theme-border hover:bg-theme-secondaryBorder rounded-lg text-sm font-semibold transition"
               >
                 {showAllAttributes ? "Show Only Top Predictions" : "Expand All 40 Attributes"}
               </button>

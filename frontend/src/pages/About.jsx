@@ -1,7 +1,7 @@
 function About() {
     return (
-        <div className="max-w-4xl mx-auto p-10 mt-10 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 text-gray-200">
-            <h2 className="text-4xl font-bold text-blue-400 mb-6 border-b border-gray-600 pb-4">How This AI Works</h2>
+        <div className="max-w-4xl mx-auto p-10 mt-10 bg-theme-card rounded-xl shadow-2xl border border-theme-border text-gray-200">
+            <h2 className="text-4xl font-bold text-white mb-6 border-b border-theme-border pb-4">How This AI Works</h2>
 
             <div className="space-y-6">
                 <section>

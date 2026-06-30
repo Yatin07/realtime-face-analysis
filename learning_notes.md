@@ -427,3 +427,30 @@ To take an AI project from `localhost` to the real internet, you need to underst
 - **What it is:** The FastAPI + PyTorch + MediaPipe python server.
 - **The Process:** This server must be "always on" and waiting for HTTP POST requests. When it receives a photo, it needs massive CPU/GPU power to run matrix multiplications.
 - **Where to host:** **Render**, **Railway**, or **AWS EC2**. These provide Virtual Machines or Docker containers that execute Python code 24/7. (Note: Hosting AI models usually requires paid tiers because models like `SimpleCNN` use heavy RAM).
+
+---
+
+# Phase 7: Professional UI Re-design (Tailwind & Theming)
+
+Instead of relying on generic Tailwind defaults (like `bg-gray-900` or `text-blue-400`), we customized our theme to look like a high-tech instrument readout.
+
+### 1. Extending Tailwind Config (`tailwind.config.js`)
+We modified the `theme.extend.colors` object in Tailwind. 
+- **Why?** This allows us to define a strict, intentional color palette (like `theme-bg`, `theme-card`, `theme-lime`) globally. Whenever we use `bg-theme-lime`, Tailwind dynamically generates the precise hex code `#9FE870`. This ensures our app uses consistent branding without repeatedly typing hex codes.
+
+### 2. Typography Split (Data vs Labels)
+We imported `Inter` and `JetBrains Mono` from Google Fonts in our `index.html`. 
+- **Why two fonts?** `Inter` is a clean sans-serif font used for headings and instructions (the "human" text). `JetBrains Mono` is a monospaced font, which means every character takes up the exact same width. This makes it perfect for displaying numbers, percentages, and data, allowing confidence scores to align perfectly vertically.
+
+### 3. Tailwind Classes Explained
+When styling the Upload Box and App background, we used specific utility classes:
+- `bg-theme-bg`: Sets the overarching application background to our near-black color.
+- `tracking-tight`: Reduces the letter-spacing on the main header, making large text look more modern and compact.
+- `border-theme-border`: Replaces the generic dashed tutorial border with a sharp, professional solid hairline border.
+- `bg-transparent border border-theme-secondaryBorder`: Creates an "outline" button effect for secondary actions, ensuring the primary "Upload Image" button (solid lime) stands out immediately.
+
+### 4. Dynamic Data Visualization (Progress Bars)
+We updated the standard Tailwind progress bars into dynamic, tiered instruments:
+- **Filtering Noise:** Attributes like "Blurry" are image-quality metrics, not facial features. We pushed them to the bottom of the list and lowered their opacity so they don't visually compete with important predictions like "Smiling".
+- **Color Theory in UI:** We assigned explicit meaning to colors. Green/Lime (`theme-lime`) means High Confidence (≥80%). Olive gray means Moderate Confidence. Rust red means Low Confidence or a negative metric (like Blurry).
+- **The Code Logic:** By using standard JavaScript `.sort()` and `.map()` inside our React JSX, we conditionally injected Tailwind classes (`text-theme-rust`, `bg-theme-lime`) based on the `attribute.confidence` integer returned by the backend.

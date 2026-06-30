@@ -5,7 +5,9 @@ import About from './pages/About';
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-sans">
+    // <div className="min-h-screen bg-gray-900 text-white font-sans">
+    <div className="min-h-screen bg-theme-bg text-white font-sans">
+
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />

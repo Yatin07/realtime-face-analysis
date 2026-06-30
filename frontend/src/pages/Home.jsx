@@ -118,17 +118,23 @@ function Home() {
 
   return (
     <div className="flex flex-col items-center p-10">
-      <h1 className="text-4xl font-bold text-blue-400 mb-8">AI Face Attribute Analyzer</h1>
+      {/* <h1 className="text-4xl font-bold text-blue-400 mb-8">AI Face Attribute Analyzer</h1> */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">AI Face Attribute Analyzer</h1>
+        <p className="text-gray-400 font-mono text-sm">Detects 40 facial attributes via on-device crop + CNN inference</p>
+      </div>
 
       {/* Top Controls */}
-      <div className="bg-gray-800 p-8 rounded-xl border-2 border-dashed border-gray-600 flex flex-col items-center mb-8">
+      <div className="bg-theme-card p-8 rounded-xl border border-theme-border flex flex-col items-center mb-8 w-full max-w-6xl">
+
+        {/* <div className="bg-gray-800 p-8 rounded-xl border-2 border-dashed border-gray-600 flex flex-col items-center mb-8"> */}
         <p className="mb-6 text-gray-300">Upload a photo or use your camera</p>
         <div className="flex space-x-4">
-          <label className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg cursor-pointer transition font-semibold">
+          <label className="bg-theme-lime text-theme-text hover:bg-[#8ade5e] px-6 py-2 rounded-lg cursor-pointer transition font-semibold">
             Upload Image
             <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
           </label>
-          <button onClick={() => { setIsWebcamActive(true); setResults(null); }} className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg transition font-semibold">
+          <button onClick={() => { setIsWebcamActive(true); setResults(null); }} className="bg-transparent border border-theme-secondaryBorder text-white hover:bg-theme-border px-6 py-2 rounded-lg transition font-semibold flex items-center space-x-2">
             Open Camera
           </button>
         </div>
@@ -184,31 +190,53 @@ function Home() {
 
         {/* Right Side: Results Panel */}
         {results && (
-          <div className="bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md border border-gray-700 h-[600px] overflow-y-auto flex flex-col">
-            <div className="sticky top-0 bg-gray-800 pb-4 border-b border-gray-600 mb-4 z-10 flex-shrink-0">
+          <div className="bg-theme-card p-6 rounded-xl shadow-xl w-full max-w-md border border-theme-border h-[600px] overflow-y-auto flex flex-col">
+            {/* <div className="bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md border border-gray-700 h-[600px] overflow-y-auto flex flex-col"> */}
+            <div className="sticky top-0 bg-theme-card pb-4 border-b border-theme-border mb-4 z-10 flex-shrink-0">
               <h2 className="text-2xl font-bold text-center">Analysis Results</h2>
               <p className="text-center text-green-400 font-mono text-sm mt-1">Backend Speed: {results.inference_time}</p>
             </div>
 
             <div className="space-y-4 flex-grow">
               {results.results
-                // NEW: Javascript Filter! If showAllAttributes is false, only keep scores > 40
                 .filter(attribute => showAllAttributes ? true : attribute.confidence > 40.0)
-                .map((attribute, index) => (
-                  <div key={index} className="flex flex-col">
-                    <div className="flex justify-between mb-1">
-                      <span className="font-semibold">{attribute.name}</span>
-                      <span className="text-gray-400">{attribute.confidence}%</span>
+                // NEW: Push "Blurry" to the bottom of the list without deleting it
+                .sort((a, b) => a.name === 'Blurry' ? 1 : b.name === 'Blurry' ? -1 : 0)
+                .map((attribute, index) => {
+                  const isBlurry = attribute.name === 'Blurry';
+
+                  // NEW: Claude's 3-Tier Confidence Color System
+                  let barColor = 'bg-theme-lime';
+                  let textColor = 'text-theme-lime';
+
+                  if (isBlurry || attribute.confidence < 40.0) {
+                    barColor = 'bg-theme-rust';
+                    textColor = 'text-theme-rust';
+                  } else if (attribute.confidence < 80.0) {
+                    barColor = 'bg-theme-olive';
+                    textColor = 'text-theme-olive';
+                  }
+
+                  return (
+                    // If it's blurry, we make the whole row slightly faded
+                    <div key={index} className={`flex flex-col mb-4 ${isBlurry ? 'opacity-50 scale-95 origin-left' : ''}`}>
+                      {/* NEW: font-mono added to make the text look like instrument data */}
+                      <div className="flex justify-between mb-1 font-mono text-sm tracking-wide">
+                        <span className="text-gray-300">{attribute.name.toLowerCase()}</span>
+                        <span className={textColor}>{attribute.confidence}%</span>
+                      </div>
+
+                      {/* NEW: Sharp edge progress bar instead of rounded-full */}
+                      <div className="w-full bg-theme-border h-1">
+                        <div
+                          className={`${barColor} h-1 transition-all duration-700`}
+                          style={{ width: `${attribute.confidence}%` }}
+                        ></div>
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2.5">
-                      <div
-                        // Dynamic color: Green if > 50%, Blue otherwise
-                        className={`${attribute.confidence > 50.0 ? 'bg-green-500' : 'bg-blue-500'} h-2.5 rounded-full`}
-                        style={{ width: `${attribute.confidence}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
+
 
               {/* NEW: Display a message if nothing was confident enough */}
               {!showAllAttributes && results.results.filter(a => a.confidence > 40.0).length === 0 && (

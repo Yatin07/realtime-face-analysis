@@ -74,6 +74,14 @@ npm run dev
 
 ---
 
+## ⚠️ Limitations & Known Issues (The "Domain Shift" Problem)
+Building a machine learning model from scratch exposes the realities of data science. While this model achieves high validation accuracy on paper, you may notice some quirks during live testing:
+* **The Domain Shift Problem:** This model was trained on the **CelebA** dataset, which consists primarily of well-lit, professional, front-facing celebrity photos. A live webcam feed (with harsh room lighting, odd angles, and webcam compression) has significantly different pixel statistics. As a result, the model's confidence may drop on "in the wild" webcam photos compared to uploaded high-quality portraits.
+* **Label Noise:** The CelebA dataset contains known subjective label noise (e.g., subjective tags like "Attractive" or "Young"). The model's predictions inherit these biases directly from the training data.
+* **Inference Hardware:** The live deployment runs PyTorch inference on a standard Render CPU, rather than utilizing a WebGL/GPU delegate. While a GPU delegate could theoretically decrease latency, it was deliberately avoided to prevent common WebGL driver crashes on Windows client machines, prioritizing stability over minor speed gains.
+
+---
+
 ## 🚀 Deployment Status
 * **Frontend Hosting:** Vercel
 * **Backend Hosting:** Render

@@ -460,5 +460,42 @@ We updated the backend (`main.py`) to return the exact `x`, `y`, `width`, and `h
 - **The Bug:** If we put `object-contain` on a fixed square box (like `w-96 h-96`), the browser adds empty "letterbox" space to the edges if the photo isn't perfectly square. This empty space breaks our math!
 - **The Fix:** We set the container to `h-auto` and the image to `w-full h-auto block`. This forces the container to shrink-wrap perfectly around the image, no matter its aspect ratio.
 - **The Math:** We use absolute CSS positioning with percentages instead of pixels:
-  `left: (box.x / box.original_w) * 100%`
   This guarantees the bounding box stays glued to the face, even if the user resizes their window or uploads a massive 4K image!
+
+### 6. The 60FPS "Live" Feel (Decoupling Architecture)
+To make the webcam mode feel truly "live", we separated the fast rendering from the slow AI processing.
+- **The Problem:** Running a heavy 40-attribute CNN in Python takes about 100-500ms. If we tie our UI bounding box to that backend response, the box will lag and stutter at 2-5 FPS.
+- **The Solution:** We run two loops simultaneously:
+  1. **The Fast Loop (60 FPS):** We load Google's `MediaPipe FaceDetector` directly into the browser memory (via CDN). We use `requestAnimationFrame` to detect the face and draw the lime box on an HTML5 `<canvas>` locally. This runs instantly without hitting the backend.
+  2. **The Slow Loop (0.6 FPS):** We use a `setInterval` to snap a photo every 1500ms and send it to the Python backend to calculate the 40 facial attributes.
+- **The Result:** The user sees a buttery-smooth 60FPS tracking box that instantly reacts to their head movements, while the complex AI data updates asynchronously alongside it without blocking the UI.
+
+### 7. Overcoming Browser Quirks (The Final Bugfixes)
+When implementing the 60FPS loop, we ran into three common frontend gotchas and fixed them:
+1. **The NPM Cache/SSL Bug:** Windows NPM sometimes throws `ERR_SSL_CIPHER_OPERATION_FAILED` or `EPERM` locks when installing complex WebAssembly modules like MediaPipe. We bypassed NPM completely by using a **Dynamic ES Module Import** (`await import(...)`) to fetch the CDN bundle directly into React's memory at runtime. 
+2. **The `readyState` Crash:** React was trying to draw the canvas before the webcam hardware actually initialized, causing a crash. We added a `video.readyState >= 2` guard so the animation loop waits patiently for the camera.
+3. **The WebGL Crash:** We swapped MediaPipe's `delegate` from `"GPU"` to `"CPU"`. WebGL is notoriously flaky on Windows browsers, and for a lightweight task like FaceDetection, the CPU can effortlessly hit 60FPS anyway.
+
+---
+
+## Phase 8: Pixel-Perfect UI Polish (The Final Mockup)
+To achieve the exact look of the final premium mockup, we have to employ several advanced UI/UX techniques. Here is a detailed breakdown of the technologies and CSS properties we will use:
+
+### 1. SVG Icons (`lucide-react`)
+- **What it is:** A library of clean, customizable SVG (Scalable Vector Graphics) icons.
+- **Why we use it:** Text-only buttons (like "Upload Image") look like a basic tutorial. Adding an icon (like a small upward arrow or a camera lens) instantly makes the button feel like a real software product. 
+- **How to use it:** We install it via `npm install lucide-react`, import the specific icons we want (e.g., `import { Upload, Camera } from 'lucide-react'`), and render them alongside our text inside a flexbox container (`flex items-center space-x-2`).
+
+### 2. Advanced Typography Styling
+The mockup relies heavily on contrast between "Human Text" and "Machine Text".
+- **Lowercase Emphasis:** You'll notice headers like "AI face attribute analyzer" are deliberately lowercase. This is a trendy design choice in modern developer tools.
+- **Monospace Data:** All technical details (`backend 1302ms`, `crop +35%/+25%`, `jpg • png • webcam`) use the `font-mono` class. This gives it a "terminal" or "heads-up display" (HUD) aesthetic. 
+
+### 3. Canvas API: Drawing Rounded Rectangles
+In our previous code, the bounding box had sharp, 90-degree corners using `ctx.strokeRect()`. The new mockup has smooth, rounded corners.
+- **How we do it:** The HTML5 Canvas API recently added `ctx.roundRect(x, y, width, height, radii)`. By setting the radii to `10`, the glowing green box will have perfectly curved edges, matching the rounded corners of our UI cards.
+
+### 4. Tailwind Layout & Progress Bar Tweaks
+- **Progress Bars:** The mockup uses very thin bars (`h-1`) with rounded ends (`rounded-full`). We will also change the background of the un-filled portion of the bar to a darker olive/gray so it blends seamlessly into the dark background.
+- **Subtle Borders:** The panels use very faint borders (`border-[#2A2B27]`) rather than solid gray. This keeps the cards distinct without drawing attention away from the data.
+- **Absolute Positioning for Overlays:** To put the "face detected" and "inference 42ms" text *inside* the camera box, we use `position: absolute` with `top-2`, `bottom-2`, `left-2`, etc. This floats the text precisely over the image.

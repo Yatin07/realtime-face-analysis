@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import axios from 'axios';
-import { FilesetResolver, FaceDetector } from '@mediapipe/tasks-vision';
+import { Upload, Camera, ArrowDown } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -50,13 +50,16 @@ function Home() {
   useEffect(() => {
     const initializeFaceDetector = async () => {
       try {
+        // Dynamically import the MediaPipe ES Module straight from the CDN!
+        const { FilesetResolver, FaceDetector } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.js");
+
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
         );
         faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite`,
-            delegate: "GPU"
+            delegate: "CPU"
           },
           runningMode: "VIDEO"
         });
@@ -67,6 +70,7 @@ function Home() {
     };
     initializeFaceDetector();
   }, []);
+
 
   const capturePhoto = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();
@@ -115,11 +119,57 @@ function Home() {
     }
   };
 
-  // The React Loop engine! 
-  // This watches `isLiveMode` and starts/stops the 500ms timer
+  // The React Loop Engine!
   useEffect(() => {
     if (isLiveMode) {
       console.log("Starting Live Scanner...");
+      let lastVideoTime = -1;
+
+      // --- THE FAST LOOP (60 FPS): In-Browser Drawing ---
+      const renderLoop = () => {
+        if (webcamRef.current && webcamRef.current.video && faceDetectorRef.current && canvasRef.current) {
+          const video = webcamRef.current.video;
+          
+          if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+            lastVideoTime = video.currentTime;
+            
+            // Sync canvas internal resolution with the actual webcam hardware resolution
+            if (canvasRef.current.width !== video.videoWidth || canvasRef.current.height !== video.videoHeight) {
+              canvasRef.current.width = video.videoWidth;
+              canvasRef.current.height = video.videoHeight;
+            }
+
+            // 1. Detect faces locally in the browser
+            const detections = faceDetectorRef.current.detectForVideo(video, performance.now());
+            
+            // 2. Draw the lime box
+            const ctx = canvasRef.current.getContext("2d");
+            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            
+            if (detections.detections.length > 0) {
+              const bbox = detections.detections[0].boundingBox;
+              ctx.strokeStyle = "#9FE870"; // theme-lime
+              ctx.lineWidth = 3;
+              // Draw small corner accents (optional but looks awesome)
+              // We'll replace this sharp box with a nice rounded rectangle API!
+              ctx.beginPath();
+              ctx.roundRect(bbox.originX, bbox.originY, bbox.width, bbox.height, 12);
+              ctx.stroke();
+              // Draw small corner accents (optional but looks awesome)
+              // ctx.fillStyle = "#9FE870";
+              // ctx.fillRect(bbox.originX, bbox.originY, 10, 3);
+              // ctx.fillRect(bbox.originX, bbox.originY, 3, 10);
+            }
+          }
+        }
+        // Run this function again on the very next screen paint!
+        requestRef.current = requestAnimationFrame(renderLoop);
+      };
+      
+      // Start the fast loop
+      requestRef.current = requestAnimationFrame(renderLoop);
+
+      // --- THE SLOW LOOP (1.5 Seconds): Python CNN Inference ---
       liveIntervalRef.current = setInterval(() => {
         if (webcamRef.current) {
           const imageSrc = webcamRef.current.getScreenshot();
@@ -127,90 +177,108 @@ function Home() {
             performLiveAnalysis(imageSrc);
           }
         }
-      }, 500); // 500ms = 2 FPS
+      }, 1500); // Changed from 500ms to 1500ms so we don't spam the server
+      
     } else {
-      // Stop the timer if Live Mode is turned off
-      if (liveIntervalRef.current) {
-        clearInterval(liveIntervalRef.current);
+      // Stop all loops if Live Mode is turned off
+      if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      // Clear the canvas
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext("2d");
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       }
     }
 
-    // Cleanup rule: Always clear timers if the component is destroyed
     return () => {
       if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
     }
   }, [isLiveMode]);
 
   return (
-    <div className="flex flex-col items-center p-10">
-      {/* <h1 className="text-4xl font-bold text-blue-400 mb-8">AI Face Attribute Analyzer</h1> */}
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">AI Face Attribute Analyzer</h1>
+    <div className="flex flex-col items-center p-10 font-sans">
+      {/* Main Header */}
+      <div className="text-center mb-10">
+        <h1 className="text-3xl font-semibold text-white mb-2">AI face attribute analyzer</h1>
         <p className="text-gray-400 font-mono text-sm">Detects 40 facial attributes via on-device crop + CNN inference</p>
       </div>
 
-      {/* Top Controls */}
-      <div className="bg-theme-card p-8 rounded-xl border border-theme-border flex flex-col items-center mb-8 w-full max-w-6xl">
-
-        {/* <div className="bg-gray-800 p-8 rounded-xl border-2 border-dashed border-gray-600 flex flex-col items-center mb-8"> */}
-        <p className="mb-6 text-gray-300">Upload a photo or use your camera</p>
+      {/* Upload Controls Panel */}
+      <div className="bg-[#11120F] p-6 rounded-xl border border-[#2A2B27] flex justify-between items-center mb-8 w-full max-w-5xl shadow-2xl">
         <div className="flex space-x-4">
-          <label className="bg-theme-lime text-theme-text hover:bg-[#8ade5e] px-6 py-2 rounded-lg cursor-pointer transition font-semibold">
-            Upload Image
+          <label className="bg-theme-lime text-[#11120F] hover:bg-[#8ade5e] px-5 py-2.5 rounded-md cursor-pointer transition font-semibold flex items-center space-x-2 text-sm">
+            <Upload size={18} />
+            <span>Upload image</span>
             <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
           </label>
-          <button onClick={() => { setIsWebcamActive(true); setResults(null); }} className="bg-transparent border border-theme-secondaryBorder text-white hover:bg-theme-border px-6 py-2 rounded-lg transition font-semibold flex items-center space-x-2">
-            Open Camera
+          <button 
+            onClick={() => { 
+              const newActiveState = !isWebcamActive;
+              setIsWebcamActive(newActiveState); 
+              setIsLiveMode(newActiveState); // Auto-start scanning!
+              setResults(null); 
+            }} 
+            className={`px-5 py-2.5 rounded-md transition font-semibold flex items-center space-x-2 text-sm ${isWebcamActive ? 'bg-[#2A2B27] text-white border border-[#444] hover:bg-[#333]' : 'bg-transparent border border-theme-secondaryBorder text-gray-200 hover:text-white hover:bg-[#2A2B27]'}`}
+          >
+            <Camera size={18} />
+            <span>{isWebcamActive ? "Close camera" : "Open camera"}</span>
           </button>
+        </div>
+        <div className="text-gray-500 font-mono text-xs">
+          jpg • png • webcam
         </div>
       </div>
 
-      <div className="flex flex-row space-x-12 w-full max-w-6xl justify-center items-start">
+      <div className="flex flex-row space-x-6 w-full max-w-5xl justify-center items-stretch h-[480px]">
 
-        {/* Left Side: Camera or Image Box */}
-        <div className="flex flex-col items-center">
+        {/* Left Side: Camera Box */}
+        <div className="flex flex-col items-center w-1/2 h-full">
 
           {isWebcamActive && (
-            <div className="flex flex-col items-center bg-theme-card border-theme-border p-4 rounded-xl border shadow-2xl">
-              {/* Added a red recording indicator if live mode is on */}
-              {isLiveMode && <div className="absolute animate-pulse bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold z-10 -mt-2 -ml-[300px]">LIVE AI</div>}
+            <div className="flex flex-col items-center bg-[#11120F] border border-[#2A2B27] rounded-xl overflow-hidden shadow-2xl relative w-full h-full">
+              
+              {/* Floating Status Text OVER the webcam */}
+              <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 text-theme-lime font-mono text-xs font-semibold">
+                <div className="w-1.5 h-1.5 rounded-full bg-theme-lime animate-pulse"></div>
+                <span>face detected</span>
+              </div>
+              <div className="absolute top-4 right-4 z-10 text-theme-lime font-mono text-xs font-semibold">
+                crop +35%/+25%
+              </div>
 
-              <Webcam
-                audio={false}
-                ref={webcamRef}
-                screenshotFormat="image/jpeg"
-                className="rounded-lg mb-4 border border-theme-border w-96 h-96 object-cover"
-                videoConstraints={{ width: 400, height: 400, facingMode: "user" }}
-              />
+              {/* Webcam & Canvas */}
+              <div className="relative w-full h-full bg-black flex-grow">
+                <Webcam
+                  audio={false}
+                  ref={webcamRef}
+                  screenshotFormat="image/jpeg"
+                  className="w-full h-full object-cover opacity-80"
+                  videoConstraints={{ width: 500, height: 400, facingMode: "user" }}
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute top-0 left-0 w-full h-full object-cover pointer-events-none"
+                />
+              </div>
 
-              <div className="flex space-x-4 w-full justify-center">
-                <button onClick={capturePhoto} disabled={isLiveMode} className={`px-4 py-2 rounded-lg font-bold ${isLiveMode ? 'bg-gray-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
-                  Snap Photo
-                </button>
-                <button
-                  onClick={() => setIsLiveMode(!isLiveMode)}
-                  className={`px-4 py-2 rounded-lg font-bold ${isLiveMode ? 'bg-red-500 hover:bg-red-600' : 'bg-purple-600 hover:bg-purple-700'}`}
-                >
-                  {isLiveMode ? 'Stop Live Scan' : 'Start Live Scan'}
-                </button>
-                <button onClick={() => { setIsWebcamActive(false); setIsLiveMode(false); }} className="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded-lg">
-                  Close
-                </button>
+              {/* Bottom Info Strip */}
+              <div className="w-full bg-[#0A0B09] px-4 py-3 border-t border-[#2A2B27] flex justify-between items-center absolute bottom-0 z-10">
+                <span className="text-gray-500 font-mono text-xs">inference 42ms • 160x160 tensor</span>
               </div>
             </div>
           )}
           {imagePreview && !isWebcamActive && (
-            <div className="flex flex-col items-center">
-
+            <div className="flex flex-col items-center bg-[#11120F] border border-[#2A2B27] rounded-xl overflow-hidden shadow-2xl w-full h-full p-4 relative justify-center">
               {/* NEW: inline-block wrapper that shrink-fits to the image's natural aspect ratio */}
-              <div className="relative rounded-lg shadow-lg border border-theme-border mb-4 overflow-hidden w-96 h-auto">
+              <div className="relative rounded-lg overflow-hidden w-full max-h-full">
                 {/* Image is w-full h-auto so it dictates the container's height without letterboxing */}
-                <img src={imagePreview} alt="Target face" className="w-full h-auto block" />
+                <img src={imagePreview} alt="Target face" className="w-full h-auto block rounded-lg" />
 
                 {/* NEW: Draw the bounding box if the backend found a face! */}
                 {results && results.box && (
                   <div
-                    className="absolute border-2 border-theme-lime shadow-[0_0_15px_rgba(159,232,112,0.3)] transition-all duration-300 pointer-events-none"
+                    className="absolute border-2 border-theme-lime rounded-[12px] shadow-[0_0_15px_rgba(159,232,112,0.3)] transition-all duration-300 pointer-events-none"
                     style={{
                       left: `${(results.box.x / results.box.original_w) * 100}%`,
                       top: `${(results.box.y / results.box.original_h) * 100}%`,
@@ -219,31 +287,30 @@ function Home() {
                     }}
                   >
                     {/* Small status strip in the corner of the box */}
-                    <span className="absolute -top-6 left-0 text-theme-lime font-mono text-xs whitespace-nowrap bg-black/60 px-1.5 py-0.5 rounded">
-                      face detected · crop +35%/+25%
+                    <span className="absolute -top-6 left-0 text-theme-lime font-mono text-xs whitespace-nowrap px-1.5 py-0.5 font-semibold">
+                      • face detected
                     </span>
                   </div>
                 )}
               </div>
-
-              <button
-                onClick={handleAnalyze} disabled={isAnalyzing}
-                className={`px-8 py-3 rounded-lg font-bold shadow-lg transition-transform transform mt-2 ${isAnalyzing ? 'bg-gray-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 hover:scale-105'}`}
-              >
-                {isAnalyzing ? 'Analyzing...' : 'Analyze Face'}
-              </button>
+              <div className="absolute bottom-4 z-10 flex space-x-2">
+                <button onClick={handleAnalyze} disabled={isAnalyzing} className={`px-6 py-2 rounded-md font-semibold text-sm transition ${isAnalyzing ? 'bg-[#2A2B27] text-gray-400 cursor-not-allowed' : 'bg-white text-black hover:bg-gray-200'}`}>
+                  {isAnalyzing ? "Analyzing..." : "Analyze Face"}
+                </button>
+              </div>
             </div>
           )}
         </div>
 
         {/* Right Side: Results Panel */}
-        {results && (
-          <div className="bg-theme-card p-6 rounded-xl shadow-xl w-full max-w-md border border-theme-border h-[600px] overflow-y-auto flex flex-col">
+        <div className="w-1/2 h-full">
+          {results ? (
+          <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full overflow-y-auto flex flex-col custom-scrollbar">
             {/* <div className="bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md border border-gray-700 h-[600px] overflow-y-auto flex flex-col"> */}
-            <div className="sticky top-0 bg-theme-card pb-4 border-b border-theme-border mb-4 z-10 flex-shrink-0">
-              <h2 className="text-2xl font-bold text-center">Analysis Results</h2>
-              <p className="text-center text-green-400 font-mono text-sm mt-1">Backend Speed: {results.inference_time}</p>
-            </div>
+            <div className="sticky top-0 bg-[#11120F] pb-4 border-b border-[#2A2B27] mb-6 z-10 flex flex-row justify-between items-end flex-shrink-0">
+              <h2 className="text-lg font-semibold text-white">Attributes</h2>
+              <p className="text-theme-lime font-mono text-xs mt-1">backend {results.inference_time}</p>
+            </div> 
 
             <div className="space-y-4 flex-grow">
               {results.results
@@ -266,18 +333,17 @@ function Home() {
                   }
 
                   return (
-                    // If it's blurry, we make the whole row slightly faded
-                    <div key={index} className={`flex flex-col mb-4 ${isBlurry ? 'opacity-50 scale-95 origin-left' : ''}`}>
+                    <div key={index} className={`flex flex-col mb-5 ${isBlurry ? 'opacity-80' : ''}`}>
                       {/* NEW: font-mono added to make the text look like instrument data */}
-                      <div className="flex justify-between mb-1 font-mono text-sm tracking-wide">
-                        <span className="text-gray-300">{attribute.name.toLowerCase()}</span>
-                        <span className={textColor}>{attribute.confidence}%</span>
+                      <div className="flex justify-between mb-1 text-sm tracking-wide font-medium">
+                        <span className="text-gray-100">{attribute.name}</span>
+                        <span className={`${textColor} font-mono font-bold`}>{attribute.confidence}%</span>
                       </div>
 
                       {/* NEW: Sharp edge progress bar instead of rounded-full */}
-                      <div className="w-full bg-theme-border h-1">
+                      <div className={`w-full h-1 rounded-full ${isBlurry ? 'bg-[#3D2520]' : 'bg-[#1C2018]'}`}>
                         <div
-                          className={`${barColor} h-1 transition-all duration-700`}
+                          className={`${barColor} h-1 transition-all duration-700 rounded-full`}
                           style={{ width: `${attribute.confidence}%` }}
                         ></div>
                       </div>
@@ -293,19 +359,31 @@ function Home() {
             </div>
 
             {/* NEW: The Toggle Button at the bottom */}
-            <div className="sticky bottom-0 bg-theme-card pt-4 border-t border-theme-border mt-6 z-10">
+            <div className="sticky bottom-0 bg-[#11120F] pt-4 pb-2 border-t border-[#2A2B27] mt-2 z-10 flex justify-center">
               <button
                 onClick={() => setShowAllAttributes(!showAllAttributes)}
-                className="w-full py-2 bg-theme-border hover:bg-theme-secondaryBorder rounded-lg text-sm font-semibold transition"
+                className="py-1.5 px-4 bg-transparent border border-[#2A2B27] hover:bg-[#2A2B27] rounded-md text-xs font-semibold transition text-gray-400 flex items-center space-x-1"
               >
-                {showAllAttributes ? "Show Only Top Predictions" : "Expand All 40 Attributes"}
+                <span>{showAllAttributes ? "Show top 5" : "Show all 40"}</span>
+                <ArrowDown size={14} className={showAllAttributes ? "rotate-180 transition" : "transition"}/>
               </button>
             </div>
 
           </div>
-        )}
-
+          ) : (
+            <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full flex flex-col justify-center items-center">
+               <p className="text-gray-500 font-mono text-sm">awaiting feed...</p>
+            </div>
+          )}
+        </div>
       </div>
+
+      <div className="w-full max-w-5xl mt-6 border-t border-[#2A2B27] pt-4">
+        <p className="text-gray-500 font-mono text-xs">
+          images processed in-memory, never stored
+        </p>
+      </div>
+
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import axios from 'axios';
+import { FilesetResolver, FaceDetector } from '@mediapipe/tasks-vision';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -15,6 +16,9 @@ function Home() {
   const [isLiveMode, setIsLiveMode] = useState(false);
   // State to toggle showing all 40 attributes or just the confident ones
   const [showAllAttributes, setShowAllAttributes] = useState(false);
+  const canvasRef = useRef(null);
+  const faceDetectorRef = useRef(null);
+  const requestRef = useRef(null); // Keeps track of our 60FPS animation loop
 
   const webcamRef = useRef(null);
   const liveIntervalRef = useRef(null); // Keeps track of our timer
@@ -42,6 +46,27 @@ function Home() {
     }
     return new File([u8arr], filename, { type: mime });
   };
+  // Initialize MediaPipe FaceDetector on load
+  useEffect(() => {
+    const initializeFaceDetector = async () => {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        );
+        faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite`,
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO"
+        });
+        console.log("MediaPipe FaceDetector loaded!");
+      } catch (error) {
+        console.error("Error loading MediaPipe:", error);
+      }
+    };
+    initializeFaceDetector();
+  }, []);
 
   const capturePhoto = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();

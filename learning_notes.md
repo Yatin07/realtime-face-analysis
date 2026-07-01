@@ -454,3 +454,11 @@ We updated the standard Tailwind progress bars into dynamic, tiered instruments:
 - **Filtering Noise:** Attributes like "Blurry" are image-quality metrics, not facial features. We pushed them to the bottom of the list and lowered their opacity so they don't visually compete with important predictions like "Smiling".
 - **Color Theory in UI:** We assigned explicit meaning to colors. Green/Lime (`theme-lime`) means High Confidence (≥80%). Olive gray means Moderate Confidence. Rust red means Low Confidence or a negative metric (like Blurry).
 - **The Code Logic:** By using standard JavaScript `.sort()` and `.map()` inside our React JSX, we conditionally injected Tailwind classes (`text-theme-rust`, `bg-theme-lime`) based on the `attribute.confidence` integer returned by the backend.
+
+### 5. Drawing a Dynamic Bounding Box Overlay (The % Math Trick)
+We updated the backend (`main.py`) to return the exact `x`, `y`, `width`, and `height` of the face it found. But how do we draw a box over the React image without it shifting when the browser is resized?
+- **The Bug:** If we put `object-contain` on a fixed square box (like `w-96 h-96`), the browser adds empty "letterbox" space to the edges if the photo isn't perfectly square. This empty space breaks our math!
+- **The Fix:** We set the container to `h-auto` and the image to `w-full h-auto block`. This forces the container to shrink-wrap perfectly around the image, no matter its aspect ratio.
+- **The Math:** We use absolute CSS positioning with percentages instead of pixels:
+  `left: (box.x / box.original_w) * 100%`
+  This guarantees the bounding box stays glued to the face, even if the user resizes their window or uploads a massive 4K image!

@@ -111,6 +111,8 @@ async def analyze_face(file: UploadFile = File(...)):
     # Run the ultra-fast face detector
     results_mp = face_detector.process(img_np)
     
+    box = None  # NEW: Initialize an empty box
+
     # If it found a face, let's crop it dynamically!
     if results_mp.detections:
         # Get the first face it found
@@ -128,16 +130,26 @@ async def analyze_face(file: UploadFile = File(...)):
         margin_x = int(w * 0.25)       # 25% on Left and Right
         margin_top = int(h * 0.35)     # 35% on Top (Hair)
         margin_bottom = int(h * 0.25)  # 25% on Bottom (Neck)
-        
-        # Apply the margins safely (making sure we don't crop outside the image border)
+                # Apply the margins safely (making sure we don't crop outside the image border)
         x_new = max(0, x - margin_x)
         y_new = max(0, y - margin_top)
         w_new = min(img_width - x_new, w + margin_x * 2)
         h_new = min(img_height - y_new, h + margin_top + margin_bottom)
         
+        # NEW: Save coordinates to send to React
+        box = {
+            "x": x_new,
+            "y": y_new,
+            "w": w_new,
+            "h": h_new,
+            "original_w": img_width,
+            "original_h": img_height
+        }
+        
         # Actually perform the crop on the original image!
         img = img.crop((x_new, y_new, x_new + w_new, y_new + h_new))
-        
+
+
     # ==========================================
     # AI PIPELINE STEP 2 - CNN PREDICTION
     # ==========================================
@@ -174,8 +186,10 @@ async def analyze_face(file: UploadFile = File(...)):
     
     return {
         "results": results_sorted,
-        "inference_time": f"{inference_ms} ms"
+        "inference_time": f"{inference_ms} ms",
+        "box": box  # NEW: Send it back to React!
     }
+
 
 
 

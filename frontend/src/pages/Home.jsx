@@ -174,10 +174,33 @@ function Home() {
               </div>
             </div>
           )}
-
           {imagePreview && !isWebcamActive && (
             <div className="flex flex-col items-center">
-              <img src={imagePreview} alt="Target face" className="w-96 h-96 object-cover rounded-lg shadow-lg border border-theme-border mb-4" />
+
+              {/* NEW: inline-block wrapper that shrink-fits to the image's natural aspect ratio */}
+              <div className="relative rounded-lg shadow-lg border border-theme-border mb-4 overflow-hidden w-96 h-auto">
+                {/* Image is w-full h-auto so it dictates the container's height without letterboxing */}
+                <img src={imagePreview} alt="Target face" className="w-full h-auto block" />
+
+                {/* NEW: Draw the bounding box if the backend found a face! */}
+                {results && results.box && (
+                  <div
+                    className="absolute border-2 border-theme-lime shadow-[0_0_15px_rgba(159,232,112,0.3)] transition-all duration-300 pointer-events-none"
+                    style={{
+                      left: `${(results.box.x / results.box.original_w) * 100}%`,
+                      top: `${(results.box.y / results.box.original_h) * 100}%`,
+                      width: `${(results.box.w / results.box.original_w) * 100}%`,
+                      height: `${(results.box.h / results.box.original_h) * 100}%`,
+                    }}
+                  >
+                    {/* Small status strip in the corner of the box */}
+                    <span className="absolute -top-6 left-0 text-theme-lime font-mono text-xs whitespace-nowrap bg-black/60 px-1.5 py-0.5 rounded">
+                      face detected · crop +35%/+25%
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={handleAnalyze} disabled={isAnalyzing}
                 className={`px-8 py-3 rounded-lg font-bold shadow-lg transition-transform transform mt-2 ${isAnalyzing ? 'bg-gray-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 hover:scale-105'}`}

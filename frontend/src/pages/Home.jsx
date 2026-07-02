@@ -78,6 +78,7 @@ function Home() {
     const file = base64ToFile(imageSrc, 'webcam_photo.jpg');
     setSelectedFile(file);
     setIsWebcamActive(false);
+    setIsLiveMode(false); // Stop the animation loop!
     setResults(null);
   }, [webcamRef]);
 
@@ -132,33 +133,34 @@ function Home() {
           
           if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
             lastVideoTime = video.currentTime;
-            
-            // Sync canvas internal resolution with the actual webcam hardware resolution
-            if (canvasRef.current.width !== video.videoWidth || canvasRef.current.height !== video.videoHeight) {
-              canvasRef.current.width = video.videoWidth;
-              canvasRef.current.height = video.videoHeight;
-            }
 
-            // 1. Detect faces locally in the browser
+            // Fix 2: sync canvas to actual hardware resolution
+            canvasRef.current.width = video.videoWidth;
+            canvasRef.current.height = video.videoHeight;
+
+            // Detect faces locally in the browser
             const detections = faceDetectorRef.current.detectForVideo(video, performance.now());
-            
-            // 2. Draw the lime box
+
             const ctx = canvasRef.current.getContext("2d");
             ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-            
+
+            // Fix 4: no face feedback
+            if (detections.detections.length === 0) {
+              ctx.font = "13px monospace";
+              ctx.fillStyle = "#D97757";
+              ctx.fillText("no face detected", 12, 24);
+            }
+
             if (detections.detections.length > 0) {
               const bbox = detections.detections[0].boundingBox;
-              ctx.strokeStyle = "#9FE870"; // theme-lime
-              ctx.lineWidth = 3;
-              // Draw small corner accents (optional but looks awesome)
-              // We'll replace this sharp box with a nice rounded rectangle API!
-              ctx.beginPath();
-              ctx.roundRect(bbox.originX, bbox.originY, bbox.width, bbox.height, 12);
-              ctx.stroke();
-              // Draw small corner accents (optional but looks awesome)
-              // ctx.fillStyle = "#9FE870";
-              // ctx.fillRect(bbox.originX, bbox.originY, 10, 3);
-              // ctx.fillRect(bbox.originX, bbox.originY, 3, 10);
+
+              // Fix 3: mirror is ONLY on the Webcam element (CSS), so the canvas
+              // coordinate space is unmirrored — flip X mathematically.
+              const flippedX = video.videoWidth - bbox.originX - bbox.width;
+
+              ctx.strokeStyle = "#9FE870";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(flippedX, bbox.originY, bbox.width, bbox.height);
             }
           }
         }
@@ -224,6 +226,14 @@ function Home() {
             <Camera size={18} />
             <span>{isWebcamActive ? "Close camera" : "Open camera"}</span>
           </button>
+          
+          {/* NEW: Bring back the Snap Photo feature when camera is open */}
+          {isWebcamActive && (
+            <button onClick={capturePhoto} className="bg-white text-black hover:bg-gray-200 px-5 py-2.5 rounded-md transition font-semibold flex items-center space-x-2 text-sm">
+              <Camera size={18} />
+              <span>Snap photo</span>
+            </button>
+          )}
         </div>
         <div className="text-gray-500 font-mono text-xs">
           jpg • png • webcam
@@ -247,18 +257,19 @@ function Home() {
                 crop +35%/+25%
               </div>
 
-              {/* Webcam & Canvas */}
+              {/* Fix 1: NO transforms on wrapper or canvas. Fix 2: mirror ONLY on Webcam via inline style. */}
               <div className="relative w-full h-full bg-black flex-grow">
                 <Webcam
                   audio={false}
                   ref={webcamRef}
                   screenshotFormat="image/jpeg"
-                  className="w-full h-full object-cover opacity-80"
+                  style={{ transform: 'scaleX(-1)' }}
+                  className="absolute top-0 left-0 w-full h-full opacity-80"
                   videoConstraints={{ width: 500, height: 400, facingMode: "user" }}
                 />
                 <canvas
                   ref={canvasRef}
-                  className="absolute top-0 left-0 w-full h-full object-cover pointer-events-none"
+                  className="absolute top-0 left-0 w-full h-full pointer-events-none"
                 />
               </div>
 
@@ -305,71 +316,69 @@ function Home() {
         {/* Right Side: Results Panel */}
         <div className="w-1/2 h-full">
           {results ? (
-          <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full overflow-y-auto flex flex-col custom-scrollbar">
-            {/* <div className="bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md border border-gray-700 h-[600px] overflow-y-auto flex flex-col"> */}
-            <div className="sticky top-0 bg-[#11120F] pb-4 border-b border-[#2A2B27] mb-6 z-10 flex flex-row justify-between items-end flex-shrink-0">
-              <h2 className="text-lg font-semibold text-white">Attributes</h2>
-              <p className="text-theme-lime font-mono text-xs mt-1">backend {results.inference_time}</p>
-            </div> 
+            results.error ? (
+              <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-theme-rust h-full flex flex-col justify-center items-center text-center px-10">
+                 <div className="w-3 h-3 rounded-full bg-theme-rust animate-pulse mb-4"></div>
+                 <p className="text-theme-rust font-mono text-sm">{results.error}</p>
+                 <p className="text-gray-500 font-mono text-xs mt-2">Try uploading an image with a clearer face.</p>
+              </div>
+            ) : (
+              <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full flex flex-col">
+                <div className="pb-4 border-b border-[#2A2B27] mb-6 flex flex-row justify-between items-end flex-shrink-0">
+                  <h2 className="text-lg font-semibold text-white">Attributes</h2>
+                  <p className="text-theme-lime font-mono text-xs mt-1">backend {results.inference_time}</p>
+                </div> 
 
-            <div className="space-y-4 flex-grow">
-              {results.results
-                .filter(attribute => showAllAttributes ? true : attribute.confidence > 40.0)
-                // NEW: Push "Blurry" to the bottom of the list without deleting it
-                .sort((a, b) => a.name === 'Blurry' ? 1 : b.name === 'Blurry' ? -1 : 0)
-                .map((attribute, index) => {
-                  const isBlurry = attribute.name === 'Blurry';
+                <div className="space-y-4 flex-grow overflow-y-auto custom-scrollbar pr-2">
+                  {results.results
+                    .slice(0, showAllAttributes ? results.results.length : 5)
+                    .sort((a, b) => a.name === 'Blurry' ? 1 : b.name === 'Blurry' ? -1 : 0)
+                    .map((attribute, index) => {
+                      const isBlurry = attribute.name === 'Blurry';
+                      let barColor = 'bg-theme-lime';
+                      let textColor = 'text-theme-lime';
 
-                  // NEW: Claude's 3-Tier Confidence Color System
-                  let barColor = 'bg-theme-lime';
-                  let textColor = 'text-theme-lime';
+                      if (isBlurry || attribute.confidence < 40.0) {
+                        barColor = 'bg-theme-rust';
+                        textColor = 'text-theme-rust';
+                      } else if (attribute.confidence < 80.0) {
+                        barColor = 'bg-theme-olive';
+                        textColor = 'text-theme-olive';
+                      }
 
-                  if (isBlurry || attribute.confidence < 40.0) {
-                    barColor = 'bg-theme-rust';
-                    textColor = 'text-theme-rust';
-                  } else if (attribute.confidence < 80.0) {
-                    barColor = 'bg-theme-olive';
-                    textColor = 'text-theme-olive';
-                  }
+                      return (
+                        <div key={index} className={`flex flex-col mb-5 ${isBlurry ? 'opacity-80' : ''}`}>
+                          <div className="flex justify-between mb-1 text-sm tracking-wide">
+                            <span className="text-gray-400 font-normal">{attribute.name}</span>
+                            <span className={`${textColor} font-mono font-medium`}>{attribute.confidence}%</span>
+                          </div>
+                          <div className={`w-full h-1 rounded-full ${isBlurry ? 'bg-[#3D2520]' : 'bg-[#1C2018]'}`}>
+                            <div
+                              className={`${barColor} h-1 transition-all duration-700 rounded-full`}
+                              style={{ width: `${attribute.confidence}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
 
-                  return (
-                    <div key={index} className={`flex flex-col mb-5 ${isBlurry ? 'opacity-80' : ''}`}>
-                      {/* NEW: font-mono added to make the text look like instrument data */}
-                      <div className="flex justify-between mb-1 text-sm tracking-wide font-medium">
-                        <span className="text-gray-100">{attribute.name}</span>
-                        <span className={`${textColor} font-mono font-bold`}>{attribute.confidence}%</span>
-                      </div>
+                  {!showAllAttributes && results.results.length === 0 && (
+                    <p className="text-center text-gray-400 italic mt-10">No attributes detected.</p>
+                  )}
+                </div>
 
-                      {/* NEW: Sharp edge progress bar instead of rounded-full */}
-                      <div className={`w-full h-1 rounded-full ${isBlurry ? 'bg-[#3D2520]' : 'bg-[#1C2018]'}`}>
-                        <div
-                          className={`${barColor} h-1 transition-all duration-700 rounded-full`}
-                          style={{ width: `${attribute.confidence}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-
-              {/* NEW: Display a message if nothing was confident enough */}
-              {!showAllAttributes && results.results.filter(a => a.confidence > 40.0).length === 0 && (
-                <p className="text-center text-gray-400 italic mt-10">No highly confident attributes detected.</p>
-              )}
-            </div>
-
-            {/* NEW: The Toggle Button at the bottom */}
-            <div className="sticky bottom-0 bg-[#11120F] pt-4 pb-2 border-t border-[#2A2B27] mt-2 z-10 flex justify-center">
-              <button
-                onClick={() => setShowAllAttributes(!showAllAttributes)}
-                className="py-1.5 px-4 bg-transparent border border-[#2A2B27] hover:bg-[#2A2B27] rounded-md text-xs font-semibold transition text-gray-400 flex items-center space-x-1"
-              >
-                <span>{showAllAttributes ? "Show top 5" : "Show all 40"}</span>
-                <ArrowDown size={14} className={showAllAttributes ? "rotate-180 transition" : "transition"}/>
-              </button>
-            </div>
-
-          </div>
+                {/* NEW: Pinned toggle button at the bottom */}
+                <div className="pt-4 border-t border-[#2A2B27] mt-4 flex justify-center flex-shrink-0">
+                  <button
+                    onClick={() => setShowAllAttributes(!showAllAttributes)}
+                    className="py-1.5 px-4 bg-transparent border border-[#2A2B27] hover:bg-[#2A2B27] rounded-md text-xs font-semibold transition text-gray-400 flex items-center space-x-1"
+                  >
+                    <span>{showAllAttributes ? "Show top 5" : "Show all 40"}</span>
+                    <ArrowDown size={14} className={showAllAttributes ? "rotate-180 transition" : "transition"}/>
+                  </button>
+                </div>
+              </div>
+            )
           ) : (
             <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full flex flex-col justify-center items-center">
                <p className="text-gray-500 font-mono text-sm">awaiting feed...</p>

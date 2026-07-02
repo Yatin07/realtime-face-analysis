@@ -114,6 +114,9 @@ async def analyze_face(file: UploadFile = File(...)):
     box = None  # NEW: Initialize an empty box
 
     # If it found a face, let's crop it dynamically!
+    if not results_mp.detections:
+        return {"error": "No face detected. Please ensure a face is visible."}
+        
     if results_mp.detections:
         # Get the first face it found
         detection = results_mp.detections[0]

@@ -499,3 +499,77 @@ In our previous code, the bounding box had sharp, 90-degree corners using `ctx.s
 - **Progress Bars:** The mockup uses very thin bars (`h-1`) with rounded ends (`rounded-full`). We will also change the background of the un-filled portion of the bar to a darker olive/gray so it blends seamlessly into the dark background.
 - **Subtle Borders:** The panels use very faint borders (`border-[#2A2B27]`) rather than solid gray. This keeps the cards distinct without drawing attention away from the data.
 - **Absolute Positioning for Overlays:** To put the "face detected" and "inference 42ms" text *inside* the camera box, we use `position: absolute` with `top-2`, `bottom-2`, `left-2`, etc. This floats the text precisely over the image.
+
+---
+
+## Phase 9: Critical Bug Fixes & Production Polish
+
+This phase documents every real technical bug we encountered and exactly how we fixed them. This is where the project matured from a prototype into a solid application.
+
+### 1. Syntax Errors in JSX (The Babel Parse Bug)
+**The Problem:** Vite's build step uses Babel to transform `.jsx` files into plain JavaScript. If any JSX tag is missing a closing bracket or a `return` statement, Babel stops with an `Unexpected token` error and a bright red overlay appears in the browser.
+**Two types of JSX bugs we fixed:**
+- **Missing `return` statement:** Inside a `.map()` callback, you *must* include an explicit `return (...)` before the JSX element. Without it, the function silently returns `undefined`, which confuses Babel.
+- **Missing closing `</div>` tag:** React's JSX is a strict tree. If you have a triple-nested ternary (`results ? (results.error ? A : B) : C`), every branch must have a perfectly balanced opening and closing tag. One missing `</div>` in any branch causes the tree to break.
+- **The Key Lesson:** Always work on JSX in a structured way — open a `<div>`, close it on the *very next line*, then fill in the content. Never patch complex JSX structures piecemeal.
+
+### 2. The Webcam Bounding Box Misalignment (Two-Part Bug)
+This was the core technical challenge of the webcam feature. The lime tracking box refused to sit over the actual face.
+
+**Cause 1: Canvas Size vs. Video Intrinsic Size**
+- **The Bug:** MediaPipe `detectForVideo()` returns face coordinates in the webcam's **native pixel space** (e.g., `x=280, y=120` out of `640x480`). But our canvas element had hard-coded `width={500} height={400}`. When we drew at pixel `280`, the canvas thought that was `280/500 = 56%` across its surface. When CSS then scaled that 500px canvas to fill a 400px div, the final pixel position was completely wrong.
+- **The Fix:** Dynamically sync the canvas internal resolution to match the actual video hardware resolution *before every draw call*:
+  ```javascript
+  canvasRef.current.width = video.videoWidth;
+  canvasRef.current.height = video.videoHeight;
+  ```
+  This ensures the canvas coordinate system is always a 1:1 map to the video's pixel space.
+
+**Cause 2: Mirror Mismatch (CSS vs. Coordinate Space)**
+- **The Bug:** We added `mirrored={true}` to `react-webcam` (which applies `transform: scaleX(-1)` to the video via CSS). CSS transforms are *purely visual* — they flip how the image looks on screen, but they do NOT flip the underlying pixel data. MediaPipe reads the raw unmirrored pixel data and returns coordinates like "face at X=100". But on screen, that X=100 position is now visually on the right side (because the CSS flipped everything). So the box appeared on the wrong side of the face.
+- **The Fix:** Apply the same `transform: scaleX(-1)` CSS to the canvas too. Since both the video and canvas are flipped by the same CSS rule, the box's draw position (`X=100`) maps to the same mirrored position as the video's visual content. They stay in sync.
+  ```jsx
+  <canvas style={{ transform: 'scaleX(-1)' }} />
+  ```
+
+**Why object-cover Matters Here:**
+The webcam uses `object-cover` to fill the container by zooming and cropping the video. This is different from `object-contain` (which letterboxes). With `object-cover`, the video always fills edge-to-edge, so our percentage-based coordinate math is always valid. Using `object-contain` would introduce invisible padding that would break the coordinate calculation.
+
+### 3. "No Face Detected" — Backend Guard
+**The Problem:** When a user uploads an image with no face (e.g., a car, a landscape), the MediaPipe face detector found nothing, but the PyTorch CNN still ran on the full un-cropped image and hallucinated random attributes.
+**The Fix:** Added an early return in `main.py` right after the MediaPipe detection step:
+```python
+if not results_mp.detections:
+    return {"error": "No face detected. Please ensure a face is visible."}
+```
+This completely short-circuits the inference pipeline. No PyTorch computation runs at all.
+**The Frontend:** The React UI checks if `results.error` exists. If it does, it replaces the Attributes panel with a clean red-bordered error card with a pulsing dot, rather than crashing or showing a blank screen.
+
+### 4. UI Architecture Fix: Scrollable Content vs. Fixed Footer
+**The Problem:** The "Show all 40" toggle button was floating mid-list because the entire panel (`overflow-y-auto`) was scrolling, including the button.
+**The Fix:** Restructured the panel container into a strict flexbox layout:
+- The outer container: `flex flex-col h-full` — fixed height flex column.
+- The title header: `flex-shrink-0` — never shrinks, always visible.
+- The attributes list: `flex-grow overflow-y-auto` — this is the ONLY part that scrolls.
+- The toggle button footer: `flex-shrink-0 pt-4 border-t` — pinned to the bottom, never scrolls.
+This is a classic CSS flexbox pattern for "header + scrollable body + fixed footer" layouts.
+
+### 5. Visual Hierarchy: Numbers as Primary Data
+**The Old Design:** Attribute names (like "Male", "Eyeglasses") were `font-semibold text-white`, making them visually dominant.
+**The Problem:** In a data tool, the *number* is what the user wants to read first, not the label. Making the label bold creates visual noise.
+**The Fix:** Flipped the weight hierarchy:
+- Labels: `font-normal text-gray-400` — quiet, secondary.
+- Percentages: `font-mono font-medium text-theme-lime/olive/rust` — the colorful, prominent data point.
+The monospace `font-mono` ensures percentage columns align perfectly vertically even when the numbers change width.
+
+### 6. Reducing DOM Nodes (The Phantom Scrollbar Fix)
+**The Old Code:** We used `.filter(a => showAllAttributes ? true : a.confidence > 40.0).map(...)`. Even in the "collapsed" view, ALL 40 attribute `<div>` nodes were created in the React DOM — they were just hidden by the filter producing no results below 40%.
+**The Real Fix:** Replaced with `.slice(0, showAllAttributes ? 40 : 5)`. Now, React literally only creates 5 `<div>` elements when collapsed. This eliminates the phantom scroll content that was triggering the scrollbar even with no visible overflow.
+
+### 7. Smart Camera Toggle (UX Pattern)
+**The Old Behavior:** "Open Camera" just showed the webcam. The user still had to manually click "Start Scan" to activate the live loop.
+**The New Behavior:** One click on "Open camera" now simultaneously:
+1. Shows the webcam preview.
+2. Starts the 60FPS MediaPipe render loop.
+3. Starts the 1500ms backend inference loop.
+And "Close camera" in one click cleans up both loops. This is a great example of **affordance design** — the user sees one action ("Open camera"), not a sequence of three actions.

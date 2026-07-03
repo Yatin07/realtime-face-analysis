@@ -74,7 +74,7 @@ function Home() {
 
   const capturePhoto = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();
-    
+
     // Create an image element to mirror it horizontally
     // so it matches what the user sees in the mirrored webcam feed
     const img = new Image();
@@ -83,14 +83,14 @@ function Home() {
       canvas.width = img.width;
       canvas.height = img.height;
       const ctx = canvas.getContext("2d");
-      
+
       // Mirror the image
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(img, 0, 0);
-      
+
       const mirroredSrc = canvas.toDataURL("image/jpeg");
-      
+
       setImagePreview(mirroredSrc);
       const file = base64ToFile(mirroredSrc, 'webcam_photo.jpg');
       setSelectedFile(file);

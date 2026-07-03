@@ -166,7 +166,7 @@ function Home() {
             const ctx = canvasRef.current.getContext("2d");
             ctx.clearRect(0, 0, natW, natH);
 
-            if (detections.detections.length === 0) {
+            if (!detections || !detections.detections || detections.detections.length === 0) {
               ctx.font = "13px monospace";
               ctx.fillStyle = "#D97757";
               ctx.fillText("no face detected", 12, 24);

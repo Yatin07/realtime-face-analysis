@@ -139,6 +139,11 @@ async def analyze_face(file: UploadFile = File(...)):
         w_new = min(img_width - x_new, w + margin_x * 2)
         h_new = min(img_height - y_new, h + margin_top + margin_bottom)
         
+        # PREVENT CRASH IF CROP IS INVALID (e.g. face is halfway off screen)
+        if w_new <= 0 or h_new <= 0:
+            return {"error": "Face too close to edge. Please center your face."}
+            
+        
         # NEW: Save coordinates to send to React
         box = {
             "x": x_new,

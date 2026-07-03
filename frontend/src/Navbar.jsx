@@ -1,7 +1,9 @@
-import { Link } from 'react-router-dom';
-import { Aperture, MoreHorizontal } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Aperture } from 'lucide-react';
 
 function Navbar() {
+    const location = useLocation();
+
     return (
         <nav className="bg-[#0A0B09] p-4 border-b border-[#2A2B27] sticky top-0 z-50">
             <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -10,11 +12,18 @@ function Navbar() {
                     <span>FACE.ANALYZER</span>
                 </div>
                 <div className="flex items-center space-x-6">
-                    <Link to="/" className="text-gray-400 hover:text-white font-medium text-sm transition">Scanner</Link>
-                    <Link to="/about" className="text-gray-400 hover:text-white font-medium text-sm transition">How it works</Link>
-                    <button className="bg-white text-black p-1 rounded hover:bg-gray-200 transition">
-                        <MoreHorizontal size={16} />
-                    </button>
+                    <Link 
+                        to="/" 
+                        className={`font-medium text-sm transition pb-1 border-b-2 ${location.pathname === '/' ? 'text-theme-lime border-theme-lime' : 'text-gray-400 border-transparent hover:text-white'}`}
+                    >
+                        Scanner
+                    </Link>
+                    <Link 
+                        to="/about" 
+                        className={`font-medium text-sm transition pb-1 border-b-2 ${location.pathname === '/about' ? 'text-theme-lime border-theme-lime' : 'text-gray-400 border-transparent hover:text-white'}`}
+                    >
+                        How it works
+                    </Link>
                 </div>
             </div>
         </nav>

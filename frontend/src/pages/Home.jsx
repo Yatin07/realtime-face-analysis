@@ -74,12 +74,31 @@ function Home() {
 
   const capturePhoto = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();
-    setImagePreview(imageSrc);
-    const file = base64ToFile(imageSrc, 'webcam_photo.jpg');
-    setSelectedFile(file);
-    setIsWebcamActive(false);
-    setIsLiveMode(false); // Stop the animation loop!
-    setResults(null);
+    
+    // Create an image element to mirror it horizontally
+    // so it matches what the user sees in the mirrored webcam feed
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      
+      // Mirror the image
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0);
+      
+      const mirroredSrc = canvas.toDataURL("image/jpeg");
+      
+      setImagePreview(mirroredSrc);
+      const file = base64ToFile(mirroredSrc, 'webcam_photo.jpg');
+      setSelectedFile(file);
+      setIsWebcamActive(false);
+      setIsLiveMode(false); // Stop the animation loop!
+      setResults(null);
+    };
+    img.src = imageSrc;
   }, [webcamRef]);
 
   // Standard Manual Analysis (For Uploads / Single Photos)
@@ -130,21 +149,21 @@ function Home() {
       const renderLoop = () => {
         if (webcamRef.current && webcamRef.current.video && faceDetectorRef.current && canvasRef.current) {
           const video = webcamRef.current.video;
-          
           if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
             lastVideoTime = video.currentTime;
 
-            // Fix 2: sync canvas to actual hardware resolution
-            canvasRef.current.width = video.videoWidth;
-            canvasRef.current.height = video.videoHeight;
+            const natW = video.videoWidth;
+            const natH = video.videoHeight;
 
-            // Detect faces locally in the browser
+            // Force canvas to exactly match the fixed 400x400 container
+            // This makes CSS scale factor exactly 1.0 in both X and Y — no distortion
+            canvasRef.current.width = 400;
+            canvasRef.current.height = 400;
+
             const detections = faceDetectorRef.current.detectForVideo(video, performance.now());
-
             const ctx = canvasRef.current.getContext("2d");
-            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            ctx.clearRect(0, 0, 400, 400);
 
-            // Fix 4: no face feedback
             if (detections.detections.length === 0) {
               ctx.font = "13px monospace";
               ctx.fillStyle = "#D97757";
@@ -154,20 +173,30 @@ function Home() {
             if (detections.detections.length > 0) {
               const bbox = detections.detections[0].boundingBox;
 
-              // Fix 3: mirror is ONLY on the Webcam element (CSS), so the canvas
-              // coordinate space is unmirrored — flip X mathematically.
-              const flippedX = video.videoWidth - bbox.originX - bbox.width;
+              // ADD THESE THREE LINES
+              console.log('natW:', natW, 'natH:', natH);
+              console.log('bbox raw:', bbox.originX, bbox.originY, bbox.width, bbox.height);
+              console.log('container:', canvasRef.current.width, canvasRef.current.height);
+
+              // Scale bbox from native video resolution into 400x400 canvas space
+              const scaleX = 400 / natW;
+              const scaleY = 400 / natH;
+
+              const scaledW = bbox.width * scaleX;
+              const scaledH = bbox.height * scaleY;
+              const scaledY = bbox.originY * scaleY;
+              // Flip X for the CSS mirror on Webcam
+              const flippedX = 400 - (bbox.originX * scaleX) - scaledW;
 
               ctx.strokeStyle = "#9FE870";
               ctx.lineWidth = 2;
-              ctx.strokeRect(flippedX, bbox.originY, bbox.width, bbox.height);
+              ctx.strokeRect(flippedX, scaledY, scaledW, scaledH);
             }
           }
         }
-        // Run this function again on the very next screen paint!
         requestRef.current = requestAnimationFrame(renderLoop);
       };
-      
+
       // Start the fast loop
       requestRef.current = requestAnimationFrame(renderLoop);
 
@@ -180,7 +209,7 @@ function Home() {
           }
         }
       }, 1500); // Changed from 500ms to 1500ms so we don't spam the server
-      
+
     } else {
       // Stop all loops if Live Mode is turned off
       if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
@@ -214,19 +243,19 @@ function Home() {
             <span>Upload image</span>
             <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
           </label>
-          <button 
-            onClick={() => { 
+          <button
+            onClick={() => {
               const newActiveState = !isWebcamActive;
-              setIsWebcamActive(newActiveState); 
+              setIsWebcamActive(newActiveState);
               setIsLiveMode(newActiveState); // Auto-start scanning!
-              setResults(null); 
-            }} 
+              setResults(null);
+            }}
             className={`px-5 py-2.5 rounded-md transition font-semibold flex items-center space-x-2 text-sm ${isWebcamActive ? 'bg-[#2A2B27] text-white border border-[#444] hover:bg-[#333]' : 'bg-transparent border border-theme-secondaryBorder text-gray-200 hover:text-white hover:bg-[#2A2B27]'}`}
           >
             <Camera size={18} />
             <span>{isWebcamActive ? "Close camera" : "Open camera"}</span>
           </button>
-          
+
           {/* NEW: Bring back the Snap Photo feature when camera is open */}
           {isWebcamActive && (
             <button onClick={capturePhoto} className="bg-white text-black hover:bg-gray-200 px-5 py-2.5 rounded-md transition font-semibold flex items-center space-x-2 text-sm">
@@ -247,7 +276,7 @@ function Home() {
 
           {isWebcamActive && (
             <div className="flex flex-col items-center bg-[#11120F] border border-[#2A2B27] rounded-xl overflow-hidden shadow-2xl relative w-full h-full">
-              
+
               {/* Floating Status Text OVER the webcam */}
               <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 text-theme-lime font-mono text-xs font-semibold">
                 <div className="w-1.5 h-1.5 rounded-full bg-theme-lime animate-pulse"></div>
@@ -258,14 +287,15 @@ function Home() {
               </div>
 
               {/* Fix 1: NO transforms on wrapper or canvas. Fix 2: mirror ONLY on Webcam via inline style. */}
-              <div className="relative w-full h-full bg-black flex-grow">
+              {/* <div className="relative w-full h-full bg-black flex-grow"> */}
+              <div className="relative bg-black mx-auto" style={{ width: '400px', height: '400px' }}>
                 <Webcam
                   audio={false}
                   ref={webcamRef}
                   screenshotFormat="image/jpeg"
                   style={{ transform: 'scaleX(-1)' }}
                   className="absolute top-0 left-0 w-full h-full opacity-80"
-                  videoConstraints={{ width: 500, height: 400, facingMode: "user" }}
+                  videoConstraints={{ width: 400, height: 400, facingMode: "user" }}
                 />
                 <canvas
                   ref={canvasRef}
@@ -318,16 +348,16 @@ function Home() {
           {results ? (
             results.error ? (
               <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-theme-rust h-full flex flex-col justify-center items-center text-center px-10">
-                 <div className="w-3 h-3 rounded-full bg-theme-rust animate-pulse mb-4"></div>
-                 <p className="text-theme-rust font-mono text-sm">{results.error}</p>
-                 <p className="text-gray-500 font-mono text-xs mt-2">Try uploading an image with a clearer face.</p>
+                <div className="w-3 h-3 rounded-full bg-theme-rust animate-pulse mb-4"></div>
+                <p className="text-theme-rust font-mono text-sm">{results.error}</p>
+                <p className="text-gray-500 font-mono text-xs mt-2">Try uploading an image with a clearer face.</p>
               </div>
             ) : (
               <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full flex flex-col">
                 <div className="pb-4 border-b border-[#2A2B27] mb-6 flex flex-row justify-between items-end flex-shrink-0">
                   <h2 className="text-lg font-semibold text-white">Attributes</h2>
                   <p className="text-theme-lime font-mono text-xs mt-1">backend {results.inference_time}</p>
-                </div> 
+                </div>
 
                 <div className="space-y-4 flex-grow overflow-y-auto custom-scrollbar pr-2">
                   {results.results
@@ -374,14 +404,14 @@ function Home() {
                     className="py-1.5 px-4 bg-transparent border border-[#2A2B27] hover:bg-[#2A2B27] rounded-md text-xs font-semibold transition text-gray-400 flex items-center space-x-1"
                   >
                     <span>{showAllAttributes ? "Show top 5" : "Show all 40"}</span>
-                    <ArrowDown size={14} className={showAllAttributes ? "rotate-180 transition" : "transition"}/>
+                    <ArrowDown size={14} className={showAllAttributes ? "rotate-180 transition" : "transition"} />
                   </button>
                 </div>
               </div>
             )
           ) : (
             <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full flex flex-col justify-center items-center">
-               <p className="text-gray-500 font-mono text-sm">awaiting feed...</p>
+              <p className="text-gray-500 font-mono text-sm">awaiting feed...</p>
             </div>
           )}
         </div>

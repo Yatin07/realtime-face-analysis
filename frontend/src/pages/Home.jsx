@@ -155,42 +155,31 @@ function Home() {
             const natW = video.videoWidth;
             const natH = video.videoHeight;
 
-            // Force canvas to exactly match the fixed 400x400 container
-            // This makes CSS scale factor exactly 1.0 in both X and Y — no distortion
-            canvasRef.current.width = 400;
-            canvasRef.current.height = 400;
+            // Since the canvas perfectly hugs the video natively via CSS (w-full h-auto),
+            // we just set the internal canvas resolution to exactly match the native video resolution.
+            if (canvasRef.current.width !== natW || canvasRef.current.height !== natH) {
+              canvasRef.current.width = natW;
+              canvasRef.current.height = natH;
+            }
 
             const detections = faceDetectorRef.current.detectForVideo(video, performance.now());
             const ctx = canvasRef.current.getContext("2d");
-            ctx.clearRect(0, 0, 400, 400);
+            ctx.clearRect(0, 0, natW, natH);
 
             if (detections.detections.length === 0) {
               ctx.font = "13px monospace";
               ctx.fillStyle = "#D97757";
               ctx.fillText("no face detected", 12, 24);
-            }
-
-            if (detections.detections.length > 0) {
+            } else {
               const bbox = detections.detections[0].boundingBox;
 
-              // ADD THESE THREE LINES
-              console.log('natW:', natW, 'natH:', natH);
-              console.log('bbox raw:', bbox.originX, bbox.originY, bbox.width, bbox.height);
-              console.log('container:', canvasRef.current.width, canvasRef.current.height);
-
-              // Scale bbox from native video resolution into 400x400 canvas space
-              const scaleX = 400 / natW;
-              const scaleY = 400 / natH;
-
-              const scaledW = bbox.width * scaleX;
-              const scaledH = bbox.height * scaleY;
-              const scaledY = bbox.originY * scaleY;
-              // Flip X for the CSS mirror on Webcam
-              const flippedX = 400 - (bbox.originX * scaleX) - scaledW;
+              // No scaling math needed! Canvas and Video share the exact same internal coordinate system.
+              // Flip X to account for the CSS scaleX(-1) on the video element.
+              const flippedX = natW - bbox.originX - bbox.width;
 
               ctx.strokeStyle = "#9FE870";
-              ctx.lineWidth = 2;
-              ctx.strokeRect(flippedX, scaledY, scaledW, scaledH);
+              ctx.lineWidth = 3;
+              ctx.strokeRect(flippedX, bbox.originY, bbox.width, bbox.height);
             }
           }
         }
@@ -286,21 +275,22 @@ function Home() {
                 crop +35%/+25%
               </div>
 
-              {/* Fix 1: NO transforms on wrapper or canvas. Fix 2: mirror ONLY on Webcam via inline style. */}
-              {/* <div className="relative w-full h-full bg-black flex-grow"> */}
-              <div className="relative bg-black mx-auto" style={{ width: '400px', height: '400px' }}>
-                <Webcam
-                  audio={false}
-                  ref={webcamRef}
-                  screenshotFormat="image/jpeg"
-                  style={{ transform: 'scaleX(-1)' }}
-                  className="absolute top-0 left-0 w-full h-full opacity-80"
-                  videoConstraints={{ width: 400, height: 400, facingMode: "user" }}
-                />
-                <canvas
-                  ref={canvasRef}
-                  className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                />
+              <div className="relative flex-grow w-full flex items-center justify-center bg-black overflow-hidden">
+                {/* The inner div perfectly hugs the video's natural aspect ratio */}
+                <div className="relative w-full">
+                  <Webcam
+                    audio={false}
+                    ref={webcamRef}
+                    screenshotFormat="image/jpeg"
+                    style={{ transform: 'scaleX(-1)' }}
+                    className="block w-full h-auto opacity-80"
+                    videoConstraints={{ facingMode: "user" }}
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
+                  />
+                </div>
               </div>
 
               {/* Bottom Info Strip */}

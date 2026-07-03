@@ -513,27 +513,29 @@ This phase documents every real technical bug we encountered and exactly how we 
 - **Missing closing `</div>` tag:** React's JSX is a strict tree. If you have a triple-nested ternary (`results ? (results.error ? A : B) : C`), every branch must have a perfectly balanced opening and closing tag. One missing `</div>` in any branch causes the tree to break.
 - **The Key Lesson:** Always work on JSX in a structured way — open a `<div>`, close it on the *very next line*, then fill in the content. Never patch complex JSX structures piecemeal.
 
-### 2. The Webcam Bounding Box Misalignment (Two-Part Bug)
-This was the core technical challenge of the webcam feature. The lime tracking box refused to sit over the actual face.
+### 2. The Webcam Bounding Box Misalignment (The Letterbox Bug)
+This was the core technical challenge of the webcam feature. The lime tracking box refused to sit over the actual face, sometimes appearing floating above or below it.
 
-**Cause 1: Canvas Size vs. Video Intrinsic Size**
-- **The Bug:** MediaPipe `detectForVideo()` returns face coordinates in the webcam's **native pixel space** (e.g., `x=280, y=120` out of `640x480`). But our canvas element had hard-coded `width={500} height={400}`. When we drew at pixel `280`, the canvas thought that was `280/500 = 56%` across its surface. When CSS then scaled that 500px canvas to fill a 400px div, the final pixel position was completely wrong.
-- **The Fix:** Dynamically sync the canvas internal resolution to match the actual video hardware resolution *before every draw call*:
-  ```javascript
-  canvasRef.current.width = video.videoWidth;
-  canvasRef.current.height = video.videoHeight;
-  ```
-  This ensures the canvas coordinate system is always a 1:1 map to the video's pixel space.
+**The Bug: CSS `object-fit: contain` Letterboxing**
+By default, the `<video>` element inside `react-webcam` uses `object-fit: contain`. If the physical camera hardware outputs a 640x480 (4:3) stream, but the React container is forced to a fixed square like 400x400 (1:1), the browser will **letterbox** the video to prevent stretching. It adds invisible 50px black bars to the top and bottom of the video. 
+However, the `<canvas>` element drawn over it *doesn't* letterbox — it stretches to cover the entire 400x400 box. Because of this, the video and the canvas are fundamentally out of alignment. If MediaPipe detects a face at `Y = 10%`, the canvas draws it 10% from the top of the container, but the actual face in the video is 10% *plus* the 50px letterbox offset!
 
-**Cause 2: Mirror Mismatch (CSS vs. Coordinate Space)**
-- **The Bug:** We added `mirrored={true}` to `react-webcam` (which applies `transform: scaleX(-1)` to the video via CSS). CSS transforms are *purely visual* — they flip how the image looks on screen, but they do NOT flip the underlying pixel data. MediaPipe reads the raw unmirrored pixel data and returns coordinates like "face at X=100". But on screen, that X=100 position is now visually on the right side (because the CSS flipped everything). So the box appeared on the wrong side of the face.
-- **The Fix:** Apply the same `transform: scaleX(-1)` CSS to the canvas too. Since both the video and canvas are flipped by the same CSS rule, the box's draw position (`X=100`) maps to the same mirrored position as the video's visual content. They stay in sync.
-  ```jsx
-  <canvas style={{ transform: 'scaleX(-1)' }} />
-  ```
-
-**Why object-cover Matters Here:**
-The webcam uses `object-cover` to fill the container by zooming and cropping the video. This is different from `object-contain` (which letterboxes). With `object-cover`, the video always fills edge-to-edge, so our percentage-based coordinate math is always valid. Using `object-contain` would introduce invisible padding that would break the coordinate calculation.
+**The Ultimate Fix: CSS Shrink-Wrapping (No Math Required)**
+Rather than guessing container sizes, `object-fit` properties, or writing complex scaling math to compensate for the letterbox, we fundamentally changed the CSS layout:
+1. **The Video Layer:** We styled the `<Webcam>` with `className="block w-full h-auto"`. This makes it take up 100% of the parent's width, and allows the browser to automatically set its height perfectly based on the camera's true native aspect ratio. No fixed heights, no letterboxing, no cropping.
+2. **The Wrapper & Canvas:** We placed the `<Webcam>` inside a `relative` wrapper. Because the webcam is now `block h-auto`, the wrapper "shrink-wraps" precisely around the video. We then lay the `absolute top-0 left-0 w-full h-full` canvas inside this wrapper.
+3. **The 1:1 Rendering Math:**
+   ```javascript
+   // Set canvas internal resolution to exactly match native video resolution
+   canvasRef.current.width = video.videoWidth;
+   canvasRef.current.height = video.videoHeight;
+   
+   // The canvas CSS (w-full h-auto) now scales both video and canvas identically.
+   // We just flip the X-axis for the CSS mirror, no manual scaling needed!
+   const flippedX = video.videoWidth - bbox.originX - bbox.width;
+   ctx.strokeRect(flippedX, bbox.originY, bbox.width, bbox.height);
+   ```
+By ensuring the DOM elements share the exact same physical dimensions and the exact same internal coordinate system (`videoWidth` x `videoHeight`), the bounding box is guaranteed to perfectly track the face across any device, any camera, and any aspect ratio!
 
 ### 3. "No Face Detected" — Backend Guard
 **The Problem:** When a user uploads an image with no face (e.g., a car, a landscape), the MediaPipe face detector found nothing, but the PyTorch CNN still ran on the full un-cropped image and hallucinated random attributes.

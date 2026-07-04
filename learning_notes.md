@@ -582,3 +582,20 @@ And "Close camera" in one click cleans up both loops. This is a great example of
 - **The Ping:** We added a `/health` endpoint to the backend and a silent `fetch()` to `Home.jsx` that runs immediately on page load to start waking the server up while the user is still reading the UI.
 - **The Timeout:** We increased the Axios `timeout` config to `60000` (60 seconds) so the browser doesn't give up before Render finishes booting.
 - **The UX:** We added a small text warning in the empty state ("first request may take ~30s if backend is waking up") and replaced generic error alerts with a helpful state update telling the user exactly what is happening.
+
+---
+
+## Phase 11: LEARNING_ROADMAP.md Created
+
+LEARNING_ROADMAP.md was created as a comprehensive beginner-to-deployment reference guide covering all 15 project files. It maps every technical concept to the exact file and line number where it appears, structured as 12 progressive phases from prerequisites through deployment.
+
+**What it covers:**
+- Full tech stack table (every library, every file it appears in, why it exists)
+- Every PyTorch concept from `nn.Module` through `torch.sigmoid` with exact line references
+- Every React hook (`useState`, `useRef`, `useEffect`, `useCallback`) with "what breaks if you use the wrong one"
+- The canvas alignment bug, the mirror flip math, the dual-loop architecture
+- Tailwind custom design tokens and every hex color with where it appears in the UI
+- Render cold start timeline, CORS production configuration, Vercel CI/CD
+- CelebA dataset characteristics, class imbalance, domain shift
+- Each phase ends with: a "minimum to know before moving on" checkpoint and a concrete "how to verify you learned it" task
+

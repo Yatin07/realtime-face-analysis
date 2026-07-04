@@ -65,7 +65,10 @@ app = FastAPI(title="Face Attribute API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://realtime-face-analysis.vercel.app",
+        "http://localhost:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"], 
@@ -94,6 +97,10 @@ face_detector = mp_face_detection.FaceDetection(model_selection=0, min_detection
 # ==========================================
 # 3. PREDICT ENDPOINT
 # ==========================================
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "model": "loaded"}
+
 @app.post("/analyze")
 async def analyze_face(file: UploadFile = File(...)):
     # Read the raw image bytes sent from React

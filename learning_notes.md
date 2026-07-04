@@ -575,3 +575,10 @@ The monospace `font-mono` ensures percentage columns align perfectly vertically 
 2. Starts the 60FPS MediaPipe render loop.
 3. Starts the 1500ms backend inference loop.
 And "Close camera" in one click cleans up both loops. This is a great example of **affordance design** — the user sees one action ("Open camera"), not a sequence of three actions.
+
+### 8. Mitigating Production Cold Starts (Free Tier Hosting)
+**The Problem:** Render's free tier automatically spins down the Python backend after 15 minutes of inactivity. When a new user visits the site, the first request wakes the server up, which can take 30+ seconds. If the frontend times out before that or gives a generic "connection failed" error, the user thinks the app is broken.
+**The Fix:** 
+- **The Ping:** We added a `/health` endpoint to the backend and a silent `fetch()` to `Home.jsx` that runs immediately on page load to start waking the server up while the user is still reading the UI.
+- **The Timeout:** We increased the Axios `timeout` config to `60000` (60 seconds) so the browser doesn't give up before Render finishes booting.
+- **The UX:** We added a small text warning in the empty state ("first request may take ~30s if backend is waking up") and replaced generic error alerts with a helpful state update telling the user exactly what is happening.

@@ -64,6 +64,7 @@ function Home() {
           runningMode: "VIDEO"
         });
         console.log("MediaPipe FaceDetector loaded!");
+        fetch(`${API_URL}/health`).catch(() => {});
       } catch (error) {
         console.error("Error loading MediaPipe:", error);
       }
@@ -112,11 +113,12 @@ function Home() {
     try {
       const response = await axios.post(`${API_URL}/analyze`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60000,
       });
       setResults(response.data);
     } catch (error) {
       console.error("Error analyzing:", error);
-      alert("Failed to connect to Python backend.");
+      setResults({ error: "Backend is waking up. Please wait 30 seconds and try again." });
     } finally {
       setIsAnalyzing(false);
     }
@@ -131,10 +133,12 @@ function Home() {
     try {
       const response = await axios.post(`${API_URL}/analyze`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60000,
       });
       setResults(response.data);
     } catch (error) {
       console.error("Live analysis failed:", error);
+      setResults({ error: "Backend is waking up. Please wait 30 seconds and try again." });
       setIsLiveMode(false); // Stop if the server crashes
     }
   };
@@ -402,6 +406,9 @@ function Home() {
           ) : (
             <div className="bg-[#11120F] p-6 rounded-xl shadow-2xl w-full border border-[#2A2B27] h-full flex flex-col justify-center items-center">
               <p className="text-gray-500 font-mono text-sm">awaiting feed...</p>
+              <p className="text-gray-600 font-mono text-xs mt-2">
+                first request may take ~30s if backend is waking up
+              </p>
             </div>
           )}
         </div>

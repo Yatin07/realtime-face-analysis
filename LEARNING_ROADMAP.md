@@ -1054,7 +1054,7 @@ You are ready to build improvements when you have successfully deployed a code c
 4. **Fix class imbalance with weighted loss** — During future retraining, compute the positive rate for each attribute (`n_positive / n_total`) and apply `pos_weight = n_negative / n_positive` to `BCEWithLogitsLoss`. This dramatically improves accuracy on rare attributes like `Bald`, `Mustache`, `Wearing_Hat`.
 
 5. **Add multi-face detection** — Currently only `detections.detections[0]` is used (`Home.jsx` line 178, `main.py` line 129). Extend to handle multiple faces by looping through all detections.
-
+        
 6. **Add face landmark visualization** — MediaPipe's FaceDetector also returns 6 key points (eyes, nose, mouth corners, ears). Drawing these as dots adds visual richness without any backend changes.
 
 7. **Add a loading skeleton** — While `isAnalyzing` is true, replace the "awaiting feed..." empty state with animated placeholder bars (the "skeleton" pattern). Teaches CSS animation and conditional rendering.

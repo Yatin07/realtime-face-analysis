@@ -9,7 +9,6 @@ import uvicorn
 import time  # NEW: Import Python's built-in time tracker
 
 # ... rest of your imports
-import cv2                        # NEW: OpenCV for image math
 import mediapipe as mp            # NEW: Google's Face Detector
 
 

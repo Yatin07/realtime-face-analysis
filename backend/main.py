@@ -96,6 +96,7 @@ face_detector = mp_face_detection.FaceDetection(model_selection=0, min_detection
 # ==========================================
 # 3. PREDICT ENDPOINT
 # ==========================================
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "model": "loaded"}
@@ -123,6 +124,8 @@ async def analyze_face(file: UploadFile = File(...)):
     if not results_mp.detections:
         return {"error": "No face detected. Please ensure a face is visible."}
         
+
+
     if results_mp.detections:
         # Get the first face it found
         detection = results_mp.detections[0]

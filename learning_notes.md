@@ -4,6 +4,83 @@ Welcome to your learning notebook! As we build this project, I will document the
 
 ---
 
+## 0. The Deep Learning Journey (Why Stage 3?)
+
+Before diving into the Web Application, it is critical to understand the foundation of this project: the Model Training Pipeline. The CNN was not built in a day; it evolved through three distinct engineering stages to overcome hardware and mathematical constraints.
+
+### Stage 1: CPU Prototype (The Bottleneck)
+- **Goal:** Prove the architecture works locally.
+- **Implementation:** Clamped the dataset to 50k images, downscaled resolution to 128x128px, and built a shallow CNN (~400k parameters).
+- **Result:** Hit 90.55% accuracy but failed completely on rare attributes like "Goatee" due to lack of visual depth and data.
+
+### Stage 2: GPU Scaling (The Conservative Flaw)
+- **Goal:** Utilize a lab RTX 4070 (12GB VRAM) to train the full 162k dataset at 160x160px.
+- **Implementation:** Deepened the CNN (~1M parameters) and used `torch.amp.autocast` (Automatic Mixed Precision) to fit large batches into VRAM. Training dropped from 5 hours to 21 minutes.
+- **Result:** Hit 91.47% accuracy, but a major flaw appeared: **Conservative Prediction**. Because the dataset is highly imbalanced, the model cheated the loss function by defaulting to "No" (0) on rare attributes. It achieved high precision by never guessing, but terrible recall.
+
+### Stage 3: Single-File GPU Optimization (The Final Mastery) 🏆
+- **Goal:** Eradicate the conservative flaw and maximize nuanced attribute detection.
+- **Implementation (The Fixes):**
+  1. **AdamW Optimizer:** Replaced standard Adam to decouple weight decay, enforcing strict regularization to prevent the network from memorizing majority-class noise.
+  2. **LR Warmup:** Built a custom 3-epoch warmup scheduler to prevent gradient explosions on large batches.
+  3. **Data Augmentation:** Added a dynamic PIL pipeline (Flips, Brightness, Contrast, Rotations) to force the model to learn structural features instead of memorizing pixels.
+  4. **Threshold Math:** Lowered the Sigmoid activation threshold from a hardcoded `0.50` to an empirically proven F1-optimal `0.40`.
+- **Result:** Flawless inference. The model correctly identifies incredibly subtle attributes (Receding Hairlines, Bags Under Eyes) without hallucinating false positives. This is the model deployed in the Web App.
+
+### Inside `stage3_gpu_single` (The Master Pipeline)
+The final optimized model code was refactored from a sprawling multi-file architecture into a clean, reproducible setup. Here are the core files that make it work:
+- **`celeba_full_gpu_training.py`**: The ultimate training script. It combines the `Dataset`, `CNN`, `Warmup Scheduler`, and `Training Loop` into a single, highly readable file. It implements `AdamW`, mixed precision (`torch.amp`), and advanced PIL data augmentation.
+- **`CelebA_Training_Notebook.ipynb`**: A Jupyter Notebook version of the training script designed for presentation and teaching, breaking down the architecture cell-by-cell.
+- **`app.py`**: A Gradio Web UI. It allows you to run a local server (`http://127.0.0.1:7860`) where you can drag-and-drop a face image and see the 40-attribute predictions in a real-time bar chart *without* needing the full React frontend. It was used as a rapid prototype.
+- **`predict_single_image.py`**: A command-line script used to test the trained `.pth` file on raw, unseen internet images to manually diagnose the "Conservative Flaw" and verify the fixes.
+
+---
+
+## 0.5. How a CNN Works (The Beginner's Guide)
+Before looking at the PyTorch code, you must understand conceptually what a **Convolutional Neural Network (CNN)** actually does. Imagine you are trying to teach a computer to recognize a face. 
+
+To a computer, an image is not a picture; it's a giant Excel spreadsheet of numbers (pixels), where each number represents a color brightness. A CNN processes this spreadsheet in a series of specific steps:
+
+### Step 1: Convolution (`Conv2d`) — "The Flashlight"
+Imagine holding a small 3x3 pixel flashlight and sliding it over the giant image, one step at a time. This flashlight is called a **Filter** or **Kernel**. 
+- In the early layers, the flashlight is looking for simple things: straight lines, curves, or edges. 
+- As the image goes deeper into the network, the flashlights look for complex things: a nose, an eye, or a pair of glasses.
+- The `Conv2d` layer is essentially a collection of these flashlights scanning the image to extract visual features.
+
+### Step 2: Normalization (`BatchNorm2d`) — "The Stabilizer"
+When the flashlights scan the image, some numbers get huge and some get tiny. This mathematical chaos makes it very hard for the network to learn stably. 
+- `BatchNorm2d` takes all the numbers produced by the flashlights and mathematically centers them. It acts as a stabilizer, preventing gradients from exploding and making the network learn much faster.
+
+### Step 3: Activation (`ReLU`) — "The Non-Linear Rule"
+If you only multiply numbers together, the computer can only learn straight lines. Real-world faces are not straight lines; they are complex curves (non-linear).
+- `ReLU` (Rectified Linear Unit) is an incredibly simple but powerful rule: **If a number is negative, turn it to 0. If it's positive, leave it alone.** 
+- This simple rule introduces non-linearity, allowing the network to understand complex, curvy shapes like a smile.
+
+### Step 4: Pooling (`MaxPool2d`) — "The Image Shrinker"
+After scanning the image for features, we have a massive amount of data. Keeping all of it would crash the computer's memory.
+- `MaxPool2d` shrinks the image (usually by half). It looks at a 2x2 grid of pixels and only keeps the **maximum** number (the strongest feature detected). 
+- If a flashlight found a sharp edge in the top left corner, MaxPool keeps that edge data but throws away the useless background pixels around it. It makes the network smaller, faster, and focused only on the most important features.
+
+### Step 4.5: Global Pooling (`AdaptiveAvgPool2d`) — "The Summarizer"
+Even after `MaxPool2d` shrinks the image, we still have spatial dimensions (e.g., a 10x10 grid of features). If we flatten this directly, the final math layer becomes too massive and uses too much RAM.
+- `AdaptiveAvgPool2d((1, 1))` takes that remaining grid and averages the entire spatial area down to exactly 1 pixel per feature channel. It essentially asks, "Does this feature exist *anywhere* in the image?" and summarizes the answer into a single number.
+
+### Step 4.6: Regularization (`Dropout`) — "The Teacher's Blindfold"
+If a neural network is allowed to look at all its features all the time, it gets lazy and memorizes the training data (overfitting).
+- `Dropout` randomly turns off a percentage of the neurons (e.g., 40%) during every training pass. It acts like a teacher blindfolding some students, forcing the rest of the network to work harder and learn redundant, robust features so it doesn't rely on just one pixel.
+
+### Step 5: Flattening & Making a Decision (`Linear` / `Fully Connected`)
+Once the image has been shrunk down to its core features, we need to make a final guess.
+- We flatten the remaining 2D grids into a single 1D row of numbers.
+- The `Linear` layer connects every single remaining feature to our 40 final outputs (our 40 facial attributes). It weighs all the evidence (e.g., "I see a curve that looks like a smile, and I see white teeth") and outputs raw numbers (logits) representing its confidence.
+
+### Step 6: The Final Score (`Sigmoid`)
+The raw numbers output by the Linear layer can be anything (like `-45` or `+82`). We need human-readable percentages.
+- `Sigmoid` takes any raw number and squashes it into a perfect scale between `0.0` and `1.0`. 
+- If it outputs `0.95` for "Wearing Glasses", we know the model is 95% confident. Because we use Sigmoid, the traits are independent—a face can be Smiling (90%) AND Wearing Glasses (95%) at the same time.
+
+---
+
 ## 1. Project Setup Concepts
 
 ### Python Virtual Environments (venv)
